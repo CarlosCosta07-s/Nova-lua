@@ -52,13 +52,13 @@ O Ghidra 12.1.4 importou a imagem bruta como ARMv6 little-endian, mapeada em 0x0
 A inspeção das funções chamadas diretamente pelo startup encontrou:
 
 - **0x00100024:** laço que grava zero em palavras de 32 bits entre dois limites carregados de literais; comportamento compatível com zerar uma região de memória.
-- **0x00104580:** percorre um intervalo de ponteiros, chama cada entrada com blx e avança quatro bytes; comportamento compatível com uma tabela de inicializadores.
+- **0x00104580:** a rotina percorre um intervalo de ponteiros via blx, mas os dois limites lidos dos literais adjacentes são iguais a 0x00666948 nesta versão; portanto, o laço não chama nenhuma entrada.
 - **0x0010693c:** tem um caminho condicionado por bytes/ponteiros globais e inicializa vários campos de uma estrutura antes de chamar rotinas auxiliares; candidata a inicialização global sob condição.
 - **0x00104628:** faz várias chamadas de preparação, calcula endereços a partir de constantes e passa parâmetros para outras rotinas; ainda não foi possível determinar o subsistema.
 - **0x00104500:** chama repetidamente ponteiros indiretos obtidos de campos/slots e volta ao bloco em 0x0010456c; candidato a ciclo de despacho/atualização.
 - **0x001044f8:** contém swi 0x3 seguido de retorno. O relatório registra a instrução, sem atribuir semântica de sistema ainda.
 
-Essas descrições são interpretações estáticas preliminares, não nomes simbólicos confirmados. O alvo 0x00100ef0 está em estado Thumb pelo blx do startup. A listagem ARM do Ghidra marcou só uma unidade nessa entrada, então conferi o mesmo offset em modo Thumb com Capstone: o trecho 0x00100ef0–0x00100f09 percorre outra tabela de ponteiros relativos, chama cada item com blx r0 e retorna quando chega ao limite. Isso confirma um segundo despachante de inicializadores no startup; sua extensão foi obtida da decodificação Thumb, não da contagem de bytes do Ghidra.
+A rotina Thumb em **0x00100ef0** calcula o intervalo de uma tabela relativa entre 0x00665f5c e 0x00666948. A leitura dos slots dá **635 entradas únicas**; cada destino é calculado somando o deslocamento de 32 bits ao endereço do próprio slot. Todos os destinos normalizados ficam no segmento text: **632 ARM e 3 Thumb**. Os primeiros destinos incluem 0x005014d8, 0x004e3e98 e 0x0050c000; os três últimos são 0x00103ed1, 0x00103e85 e 0x00103e95. O script [list_ultrasun_initializers.py](analysis/list_ultrasun_initializers.py) reproduz a contagem e pode listar a tabela completa a partir de uma cópia local do .code. Essa estrutura é compatível com uma tabela de inicializadores relativos; as funções chamadas ainda não foram todas identificadas semanticamente.\n\nEssas descrições são interpretações estáticas preliminares, não nomes simbólicos confirmados. O alvo 0x00100ef0 está em estado Thumb pelo blx do startup. A listagem ARM do Ghidra marcou só uma unidade nessa entrada, então conferi o mesmo offset em modo Thumb com Capstone: o trecho 0x00100ef0–0x00100f09 percorre outra tabela de ponteiros relativos, chama cada item com blx r0 e retorna quando chega ao limite. Isso confirma um segundo despachante de inicializadores no startup; sua extensão foi obtida da decodificação Thumb, não da contagem de bytes do Ghidra.
 
 O script [AnalyzeUltraSunStartup.java](analysis/AnalyzeUltraSunStartup.java) repete a análise dos nove destinos, cria funções quando possível e imprime até 40 instruções por função. A última execução encontrou funções com 28, 76, 152, 172, 1, 44, 32, 128 e 8 bytes, respectivamente. O tamanho de 1 byte em 0x00100ef0 é uma limitação do passe atual, não uma estimativa confiável do tamanho real daquela rotina.
 
@@ -74,7 +74,7 @@ Os utilitários e cópias de análise ficam na área local .tools/ e analysis_wo
 
 ## Limites e próximas etapas
 
-Esta é uma primeira passagem de engenharia reversa, não uma compreensão completa do jogo. A análise automática do binário inteiro foi interrompida por lentidão e referências a endereços não mapeados, então não há inventário global confiável de funções nem pseudocódigo completo. A próxima etapa é seguir incrementalmente as funções auxiliares do startup e resolver os ponteiros das duas tabelas de inicializadores, nomeando rotinas somente depois de confirmar dados e chamadas.
+Esta é uma primeira passagem de engenharia reversa, não uma compreensão completa do jogo. A análise automática do binário inteiro foi interrompida por lentidão e referências a endereços não mapeados, então não há inventário global confiável de funções nem pseudocódigo completo. A próxima etapa é classificar funções chamadas pela tabela relativa em grupos, comparar seus padrões de prólogo/chamadas e seguir referências a dados, atribuindo nomes somente depois de confirmar o comportamento.
 
 A ROM original foi apenas lida. Nenhuma chave foi procurada ou usada. Não publicar a ROM, código extraído, assets, textos ou chaves.
 
