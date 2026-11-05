@@ -2,4 +2,5 @@
 
 ## Pokémon Ultra Sun
 
-- [Relatório de engenharia reversa (reconhecimento inicial)](REVERSE_ENGINEERING.md)
+- [Relatório de análise reversa estática](REVERSE_ENGINEERING.md)
+- Scripts de análise e inventário ficam em [analysis/](analysis/).
