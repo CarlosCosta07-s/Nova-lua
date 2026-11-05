@@ -58,7 +58,7 @@ A inspeção das funções chamadas diretamente pelo startup encontrou:
 - **0x00104500:** chama repetidamente ponteiros indiretos obtidos de campos/slots e volta ao bloco em 0x0010456c; candidato a ciclo de despacho/atualização.
 - **0x001044f8:** contém swi 0x3 seguido de retorno. O relatório registra a instrução, sem atribuir semântica de sistema ainda.
 
-Essas descrições são interpretações estáticas preliminares, não nomes simbólicos confirmados. O alvo 0x00100ef0 está em estado Thumb pelo blx do startup; o Ghidra nesta passagem marcou só uma unidade de código nessa entrada, então sua rotina precisa de análise específica em modo Thumb.
+Essas descrições são interpretações estáticas preliminares, não nomes simbólicos confirmados. O alvo 0x00100ef0 está em estado Thumb pelo blx do startup. A listagem ARM do Ghidra marcou só uma unidade nessa entrada, então conferi o mesmo offset em modo Thumb com Capstone: o trecho 0x00100ef0–0x00100f09 percorre outra tabela de ponteiros relativos, chama cada item com blx r0 e retorna quando chega ao limite. Isso confirma um segundo despachante de inicializadores no startup; sua extensão foi obtida da decodificação Thumb, não da contagem de bytes do Ghidra.
 
 O script [AnalyzeUltraSunStartup.java](analysis/AnalyzeUltraSunStartup.java) repete a análise dos nove destinos, cria funções quando possível e imprime até 40 instruções por função. A última execução encontrou funções com 28, 76, 152, 172, 1, 44, 32, 128 e 8 bytes, respectivamente. O tamanho de 1 byte em 0x00100ef0 é uma limitação do passe atual, não uma estimativa confiável do tamanho real daquela rotina.
 
@@ -74,7 +74,7 @@ Os utilitários e cópias de análise ficam na área local .tools/ e analysis_wo
 
 ## Limites e próximas etapas
 
-Esta é uma primeira passagem de engenharia reversa, não uma compreensão completa do jogo. A análise automática do binário inteiro foi interrompida por lentidão e referências a endereços não mapeados, então não há inventário global confiável de funções nem pseudocódigo completo. A próxima etapa é corrigir o estado ARM/Thumb da rotina em 0x00100ef0 e seguir incrementalmente as funções auxiliares do startup, nomeando-as somente depois de confirmar dados e chamadas.
+Esta é uma primeira passagem de engenharia reversa, não uma compreensão completa do jogo. A análise automática do binário inteiro foi interrompida por lentidão e referências a endereços não mapeados, então não há inventário global confiável de funções nem pseudocódigo completo. A próxima etapa é seguir incrementalmente as funções auxiliares do startup e resolver os ponteiros das duas tabelas de inicializadores, nomeando rotinas somente depois de confirmar dados e chamadas.
 
 A ROM original foi apenas lida. Nenhuma chave foi procurada ou usada. Não publicar a ROM, código extraído, assets, textos ou chaves.
 
