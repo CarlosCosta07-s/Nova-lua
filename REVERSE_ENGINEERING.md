@@ -49,9 +49,18 @@ O Ghidra 12.1.4 importou a imagem bruta como ARMv6 little-endian, mapeada em 0x0
 | 0x0010001C | bl 0x00104500 |
 | 0x00100020 | b 0x001044f8 |
 
-O alvo em 0x00100024 contém um laço de preenchimento com zero, compatível com inicialização de uma região de memória. O alvo em 0x00104580 percorre uma tabela de ponteiros e chama cada entrada via blx, compatível com uma tabela de inicializadores. Os demais destinos foram criados como funções pelo passe direcionado do Ghidra; seus nomes descritivos no script são hipóteses de navegação, não identificações definitivas. Em particular, 0x00104500 é tratado como candidato a despacho principal e 0x001044f8 como stub de saída, ainda sem conclusão sobre o comportamento global do jogo.
+A inspeção das funções chamadas diretamente pelo startup encontrou:
 
-O script [AnalyzeUltraSunStartup.java](analysis/AnalyzeUltraSunStartup.java) repete essa análise limitada ao startup e registra os tamanhos das funções encontradas. A execução confirmou os alvos em 0x00100024, 0x001045b4, 0x0010693c, 0x00104628, 0x00100ef0, 0x00104580, 0x00104608, 0x00104500 e 0x001044f8. O Ghidra identificou respectivamente funções com 28, 76, 152, 172, 1, 44, 32, 128 e 8 bytes nessa passagem.
+- **0x00100024:** laço que grava zero em palavras de 32 bits entre dois limites carregados de literais; comportamento compatível com zerar uma região de memória.
+- **0x00104580:** percorre um intervalo de ponteiros, chama cada entrada com blx e avança quatro bytes; comportamento compatível com uma tabela de inicializadores.
+- **0x0010693c:** tem um caminho condicionado por bytes/ponteiros globais e inicializa vários campos de uma estrutura antes de chamar rotinas auxiliares; candidata a inicialização global sob condição.
+- **0x00104628:** faz várias chamadas de preparação, calcula endereços a partir de constantes e passa parâmetros para outras rotinas; ainda não foi possível determinar o subsistema.
+- **0x00104500:** chama repetidamente ponteiros indiretos obtidos de campos/slots e volta ao bloco em 0x0010456c; candidato a ciclo de despacho/atualização.
+- **0x001044f8:** contém swi 0x3 seguido de retorno. O relatório registra a instrução, sem atribuir semântica de sistema ainda.
+
+Essas descrições são interpretações estáticas preliminares, não nomes simbólicos confirmados. O alvo 0x00100ef0 está em estado Thumb pelo blx do startup; o Ghidra nesta passagem marcou só uma unidade de código nessa entrada, então sua rotina precisa de análise específica em modo Thumb.
+
+O script [AnalyzeUltraSunStartup.java](analysis/AnalyzeUltraSunStartup.java) repete a análise dos nove destinos, cria funções quando possível e imprime até 40 instruções por função. A última execução encontrou funções com 28, 76, 152, 172, 1, 44, 32, 128 e 8 bytes, respectivamente. O tamanho de 1 byte em 0x00100ef0 é uma limitação do passe atual, não uma estimativa confiável do tamanho real daquela rotina.
 
 ## Ferramentas
 
@@ -65,7 +74,7 @@ Os utilitários e cópias de análise ficam na área local .tools/ e analysis_wo
 
 ## Limites e próximas etapas
 
-Esta é uma primeira passagem de engenharia reversa, não uma compreensão completa do jogo. A análise automática do binário inteiro foi interrompida por lentidão e referências a endereços não mapeados, então não há inventário global confiável de funções nem pseudocódigo completo. O próximo passo é fazer análise incremental de rotinas alcançadas pelo startup e identificar estruturas de inicialização, chamadas e dados referenciados, mantendo os nomes de função como hipóteses até validação adicional.
+Esta é uma primeira passagem de engenharia reversa, não uma compreensão completa do jogo. A análise automática do binário inteiro foi interrompida por lentidão e referências a endereços não mapeados, então não há inventário global confiável de funções nem pseudocódigo completo. A próxima etapa é corrigir o estado ARM/Thumb da rotina em 0x00100ef0 e seguir incrementalmente as funções auxiliares do startup, nomeando-as somente depois de confirmar dados e chamadas.
 
 A ROM original foi apenas lida. Nenhuma chave foi procurada ou usada. Não publicar a ROM, código extraído, assets, textos ou chaves.
 
