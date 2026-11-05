@@ -7,6 +7,7 @@ boundary analysis: it scans 0x60 bytes from each relative-table target.
 
 import argparse
 import struct
+from collections import Counter
 from pathlib import Path
 
 from capstone import CS_ARCH_ARM, CS_MODE_ARM, CS_MODE_LITTLE_ENDIAN, CS_MODE_THUMB, Cs
@@ -28,6 +29,7 @@ def main() -> None:
     arm = Cs(CS_ARCH_ARM, CS_MODE_ARM | CS_MODE_LITTLE_ENDIAN)
     thumb = Cs(CS_ARCH_ARM, CS_MODE_THUMB | CS_MODE_LITTLE_ENDIAN)
     matching = []
+    prologues = Counter()
     total = 0
 
     for slot in range(TABLE_START, TABLE_END, 4):
@@ -36,7 +38,9 @@ def main() -> None:
         target = raw_target & ~1
         mode = thumb if raw_target & 1 else arm
         start = target - CODE_BASE
-        instructions = mode.disasm(code[start : start + WINDOW_SIZE], target)
+        instructions = list(mode.disasm(code[start : start + WINDOW_SIZE], target))
+        if instructions:
+            prologues[" ".join(i.mnemonic for i in instructions[:4])] += 1
         if any(
             instruction.mnemonic.startswith("bl")
             and instruction.op_str.lstrip("#") == f"{GUARD_HELPER:#x}"
@@ -49,6 +53,9 @@ def main() -> None:
     print(f"relative-table entries: {(TABLE_END - TABLE_START) // 4}")
     print(f"entries with a direct call to {GUARD_HELPER:#010x} in first {WINDOW_SIZE:#x} bytes: {total}")
     print("sample targets:", ", ".join(f"{target:#010x}" for target in matching))
+    print("top four-instruction mnemonic patterns:")
+    for pattern, count in prologues.most_common(8):
+        print(f"  {count}: {pattern}")
     print("Interpretation: fixed-window pattern only; function boundaries are not inferred.")
 
 
