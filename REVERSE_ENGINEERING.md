@@ -1,15 +1,12 @@
-# Pokémon Ultra Sun — análise reversa
+# Pokémon Ultra Sun — análise reversa estática
 
-**Estado:** reconhecimento inicial; a engenharia reversa do conteúdo ainda não começou.  
+**Estado:** reconhecimento do contêiner e análise inicial do executável ARM; a análise do jogo completo continua.  
 **Data:** 2026-11-05  
-**Alvo:** imagem CCI indicada pelo usuário. A ROM foi aberta somente para leitura; nenhum byte foi alterado.
+**Escopo:** leitura estática, sem modificar a ROM. A ROM, o executável extraído, assets, textos e chaves não foram enviados a este repositório.
 
-## Resultado inicial
+## Resultado do contêiner
 
-- O arquivo indicado está disponível localmente e mede **4.294.967.296 bytes (4 GiB)**.
-- O cabeçalho contém a assinatura **NCSD** no deslocamento `0x100`.
-- O tamanho declarado pelo cabeçalho é **8.388.608 unidades de 512 bytes**, igual ao tamanho observado do arquivo.
-- A tabela NCSD contém entradas não vazias nos índices 0, 1, 6 e 7. As posições e tamanhos decodificados estão abaixo; isso ainda não confirma o conteúdo ou a descriptografia das partições.
+A imagem indicada tem **4.294.967.296 bytes (4 GiB)**. Sua assinatura NCSD está em 0x100; o comprimento declarado (0x800000 unidades de 512 bytes) coincide com o tamanho observado. Foram encontradas quatro partições não vazias:
 
 | Índice | Deslocamento (unidades de 512 bytes) | Tamanho (unidades de 512 bytes) | Deslocamento (bytes) | Tamanho (bytes) |
 |---:|---:|---:|---:|---:|
@@ -18,28 +15,64 @@
 | 6 | 0x6E2320 | 0x2F00 | 3.695.591.424 | 6.160.384 |
 | 7 | 0x6E5220 | 0x11698 | 3.701.751.808 | 36.515.840 |
 
-## Ferramentas e limite atual
+As partições foram reconhecidas como NCCH. A partição principal informa product code CTR-P-A2AA, program ID 0x00040000001B5000 e a flag NCCH “no crypto”. Essa constatação vem dos metadados e não exigiu busca ou uso de chaves.
 
-- O **REA** solicitado foi inspecionado no repositório upstream. Ele oferece fluxos de análise de binários e integração com motores como Ghidra, mas a documentação consultada não descreve um importador/extrator CCI/NCSD.
-- O fluxo de binário bruto documentado pelo REA exige arquitetura e endereço de entrada explícitos. A documentação de ARM indica estado A32; portanto, não se deve assumir que um executável 3DS extraído será analisado corretamente por esse fluxo sem confirmar formato, mapeamento e estado ARM/Thumb.
-- Neste ambiente, Python e GitHub CLI estão disponíveis. Node.js/npm, ctrtool, 3dstool, Ghidra e Rizin não foram encontrados. Assim, ainda não há extração de ExeFS/RomFS nem análise de código.
-- O REA não foi instalado nem configurado, e nenhuma chave ou material de descriptografia foi procurado ou usado.
+## Executável principal
 
-## Próximas etapas
+O ExeFS da partição principal lista .code, banner e icon. O componente .code tem **0x5A4000 bytes**, começa no arquivo CCI no deslocamento **0x7000**, e seu SHA-256 local confere com o hash armazenado no ExeFS:
 
-1. Usar uma ferramenta 3DS livre e reconhecida (por exemplo, **3dstool** ou **ctrtool**) para validar o contêiner e inventariar as partições, sem escrever de volta na ROM.
-2. Caso o conteúdo esteja criptografado, continuar apenas com uma cópia legitimamente descriptografada ou chaves que o usuário esteja autorizado a usar; não contornar proteção nem publicar chaves.
-3. Extrair somente os componentes necessários para análise local, preservar hashes e registrar os comandos e versões das ferramentas.
-4. Analisar executáveis ARM e dados com um desassemblador/decompilador adequado. Usar REA apenas nas entradas e formatos que seu provedor realmente aceite; complementar com Ghidra/objdump ou ferramentas 3DS quando necessário.
-5. Publicar neste repositório notas, tabelas, hashes, mapas de símbolos e scripts de análise próprios. **Não publicar a ROM, código extraído, assets, textos ou chaves do jogo.**
-6. Manter a ROM original intacta e verificar sua identidade antes/depois de qualquer etapa de leitura.
+b5388f7500d91be01499a99ca007c98212068608ed7c83c43952e1d5148e9e09
+
+O ExHeader descreve os segmentos carregados:
+
+| Segmento | Endereço | Tamanho de código | Espaço alocado |
+|---|---:|---:|---:|
+| Text | 0x00100000 | 0x4B99F0 | 0x4BA000 |
+| Rodata | 0x005BA000 | 0xAC948 | 0xAD000 |
+| Data | 0x00667000 | 0x3CD48 | 0x3D000 |
+
+O byte de compressão do ExHeader é zero. Os tamanhos alocados somam 0x5A4000, consistente com o tamanho de .code. A cópia de trabalho desse componente permaneceu local para análise e não foi publicada.
+
+## Startup analisado
+
+O Ghidra 12.1.4 importou a imagem bruta como ARMv6 little-endian, mapeada em 0x00100000, sem executar análise automática do binário inteiro. O startup contém nove instruções:
+
+| Endereço | Instrução observada |
+|---:|---|
+| 0x00100000 | bl 0x00100024 |
+| 0x00100004 | bl 0x001045b4 |
+| 0x00100008 | bl 0x0010693c |
+| 0x0010000C | bl 0x00104628 |
+| 0x00100010 | blx 0x00100ef0 |
+| 0x00100014 | bl 0x00104580 |
+| 0x00100018 | bl 0x00104608 |
+| 0x0010001C | bl 0x00104500 |
+| 0x00100020 | b 0x001044f8 |
+
+O alvo em 0x00100024 contém um laço de preenchimento com zero, compatível com inicialização de uma região de memória. O alvo em 0x00104580 percorre uma tabela de ponteiros e chama cada entrada via blx, compatível com uma tabela de inicializadores. Os demais destinos foram criados como funções pelo passe direcionado do Ghidra; seus nomes descritivos no script são hipóteses de navegação, não identificações definitivas. Em particular, 0x00104500 é tratado como candidato a despacho principal e 0x001044f8 como stub de saída, ainda sem conclusão sobre o comportamento global do jogo.
+
+O script [AnalyzeUltraSunStartup.java](analysis/AnalyzeUltraSunStartup.java) repete essa análise limitada ao startup e registra os tamanhos das funções encontradas. A execução confirmou os alvos em 0x00100024, 0x001045b4, 0x0010693c, 0x00104628, 0x00100ef0, 0x00104580, 0x00104608, 0x00104500 e 0x001044f8. O Ghidra identificou respectivamente funções com 28, 76, 152, 172, 1, 44, 32, 128 e 8 bytes nessa passagem.
+
+## Ferramentas
+
+- **Ghidra 12.1.4** e **Eclipse Temurin JDK 25.0.5**: instalados localmente; usados para importar e inspecionar o executável ARM.
+- **REA 6.8.0**: instalado localmente; o diagnóstico do provedor Ghidra passou. O comando de inspeção do REA recusou este arquivo bruto ARM no provedor Windows disponível, que não oferece esse formato/arquitetura nessa rota. A análise foi feita diretamente no Ghidra.
+- **pyctr 0.7.6**: instalado localmente e usado para interpretar estruturas 3DS.
+- **Capstone 5.0.9**: instalado localmente e usado para conferir a decodificação ARM.
+- **3dstool**: não foi usado; não havia executável Windows disponível e a compilação exigiria ferramentas ausentes. A leitura das estruturas foi feita com pyctr e parsing direcionado.
+
+Os utilitários e cópias de análise ficam na área local .tools/ e analysis_work/; somente este relatório e o script de análise foram publicados.
+
+## Limites e próximas etapas
+
+Esta é uma primeira passagem de engenharia reversa, não uma compreensão completa do jogo. A análise automática do binário inteiro foi interrompida por lentidão e referências a endereços não mapeados, então não há inventário global confiável de funções nem pseudocódigo completo. O próximo passo é fazer análise incremental de rotinas alcançadas pelo startup e identificar estruturas de inicialização, chamadas e dados referenciados, mantendo os nomes de função como hipóteses até validação adicional.
+
+A ROM original foi apenas lida. Nenhuma chave foi procurada ou usada. Não publicar a ROM, código extraído, assets, textos ou chaves.
 
 ## Referências
 
 - [REA — projeto upstream](https://github.com/morluto/rea)
-- [REA — análise de binários brutos](https://github.com/morluto/rea/blob/main/docs/raw-binary.md)
-- [REA — ferramentas de engenharia reversa](https://github.com/morluto/rea/blob/main/docs/reverse-engineering-tools.md)
 - [3dstool — código-fonte upstream](https://github.com/dnasdw/3dstool)
-- [3DS-rom-tools — referência de fluxo de extração CCI](https://github.com/ihaveamac/3DS-rom-tools/wiki/Extract-a-game-or-application-in-.3ds-or-.cci-format)
-
-As referências descrevem projetos/ferramentas; não são evidência de que essas ferramentas estejam instaladas ou já tenham sido executadas nesta análise.
+- [pyctr — código-fonte upstream](https://github.com/ihaveamac/pyctr)
+- [Ghidra — projeto upstream](https://github.com/NationalSecurityAgency/ghidra)
+- [Capstone — projeto upstream](https://github.com/capstone-engine/capstone)
